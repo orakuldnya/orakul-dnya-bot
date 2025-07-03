@@ -2,30 +2,31 @@ name: Daily Horoscope
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Каждый день в 9 утра по Киеву (UTC+3)
-  workflow_dispatch:
+    - cron: '0 6 * * *'  # Ежедневно в 9 утра по Киеву (UTC+3)
+  workflow_dispatch: # Позволяет запускать вручную из интерфейса GitHub
 
 jobs:
   send_horoscope:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Выбираем операционную систему для выполнения
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout repository # Клонируем репозиторий
+        uses: actions/checkout@v4 # Использование последней стабильной версии v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Python # Настраиваем окружение Python
+        uses: actions/setup-python@v5 # Использование последней стабильной версии v5
         with:
-          python-version: '3.10'
+          python-version: '3.10' # Указываем нужную версию Python
 
-      - name: Install dependencies
+      - name: Install dependencies # Устанавливаем необходимые библиотеки
         run: |
-          pip install --upgrade pip
-          pip install python-telegram-bot==13.15 requests
+          python -m pip install --upgrade pip # Обновляем pip
+          pip install python-telegram-bot==13.15 requests # Устанавливаем зависимости
 
-      - name: Run bot script
-        env:
+      - name: Run bot script # Запускаем ваш Python-скрипт
+        env: # Передаем секреты как переменные окружения
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           HF_API_TOKEN: ${{ secrets.HF_API_TOKEN }}
         run: python bot_script.py
+
