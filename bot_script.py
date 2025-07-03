@@ -1,13 +1,11 @@
 import os
+import requests
 from telegram import Bot
-from openai import OpenAI
 from datetime import datetime
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 CHANNEL_ID = os.environ['CHANNEL_ID']
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+HF_API_TOKEN = os.environ['HF_API_TOKEN']
 
 def generate_horoscope():
     prompt = (
@@ -15,13 +13,24 @@ def generate_horoscope():
         "Каждый знак — отдельный абзац. Стиль: эзотерика, любовь, успех. "
         "Текст должен быть универсальным и немного загадочным."
     )
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=1,
-        max_tokens=1000
+    
+    headers = {
+        "Authorization": f"Bearer {HF_API_TOKEN}"
+    }
+
+    json_data = {
+        "inputs": prompt,
+        "parameters": {"temperature": 0.8, "max_new_tokens": 500}
+    }
+
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct",
+        headers=headers,
+        json=json_data
     )
-    return response.choices[0].message.content
+
+    result = response.json()
+    return result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "Ошибка генерации")
 
 def main():
     bot = Bot(token=BOT_TOKEN)
