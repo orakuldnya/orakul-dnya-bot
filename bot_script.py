@@ -2,6 +2,8 @@ import os
 import requests
 import telegram
 import logging
+# Для более новых версий python-telegram-bot
+from telegram import constants # Добавляем этот импорт
 
 # Настройка логирования
 logging.basicConfig(
@@ -12,10 +14,9 @@ logger = logging.getLogger(__name__)
 
 # --- Константы ---
 # URL вашей модели на Hugging Face Inference API
-# Вы можете найти его на странице вашей модели (обычно справа, в разделе "Deploy" или "Inference API")
-# Пример: "https://api-inference.huggingface.co/models/google/gemma-2b"
-# Замените этот URL на URL вашей конкретной модели
-HF_API_URL = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
+# Замените этот URL на URL вашей конкретной модели, если хотите попробовать другую.
+# Убедитесь, что вы приняли условия использования модели на HF, если она "gated".
+HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
 
 # --- Функции ---
 
@@ -86,19 +87,21 @@ async def send_telegram_message(bot_token: str, channel_id: str, message_text: s
     """
     try:
         bot = telegram.Bot(token=bot_token)
-        await bot.send_message(chat_id=channel_id, text=message_text, parse_mode=telegram.ParseMode.MARKDOWN)
+        # Использование строки 'Markdown' для parse_mode
+        await bot.send_message(chat_id=channel_id, text=message_text, parse_mode='Markdown')
         logger.info(f"Сообщение успешно отправлено в канал {channel_id}.")
-    except telegram.error.Unauthorized:
-        logger.error("Ошибка авторизации Telegram: Неверный BOT_TOKEN.")
-        logger.error("Убедитесь, что BOT_TOKEN правильный и бот добавлен в канал с правами администратора.")
-    except telegram.error.BadRequest as e:
+    except telegram.error.BadRequest as e: # Обновлено для v20+
         logger.error(f"Ошибка Telegram BadRequest: {e}")
         if "chat not found" in str(e).lower():
             logger.error(f"Канал с ID {channel_id} не найден или бот не имеет к нему доступа. Проверьте CHANNEL_ID.")
+        elif "unauthorized" in str(e).lower(): # Для Unauthorized ошибок в BadRequest
+            logger.error("Ошибка авторизации Telegram: Неверный BOT_TOKEN. Убедитесь, что BOT_TOKEN правильный и бот добавлен в канал с правами администратора.")
         else:
             logger.error(f"Проверьте CHANNEL_ID или права бота: {e}")
     except telegram.error.TimedOut:
         logger.error("Таймаут при отправке сообщения в Telegram.")
+    except telegram.error.TelegramError as e: # Более общий класс ошибок Telegram (для v20+)
+        logger.error(f"Произошла общая ошибка Telegram: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Непредвиденная ошибка при отправке сообщения в Telegram: {e}", exc_info=True)
 
@@ -119,7 +122,6 @@ async def main():
 
     logger.info("Запуск генерации гороскопа...")
 
-    # Вы можете сделать этот промпт более динамичным, например, добавляя текущую дату
     horoscope_prompt = "Напиши сегодняшний гороскоп, который будет воодушевлять и давать полезные советы на день."
     horoscope_text = generate_horoscope(horoscope_prompt)
 
@@ -134,7 +136,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Запуск асинхронной функции
     import asyncio
     asyncio.run(main())
-
