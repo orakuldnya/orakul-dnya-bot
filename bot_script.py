@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Вы можете найти его на странице вашей модели (обычно справа, в разделе "Deploy" или "Inference API")
 # Пример: "https://api-inference.huggingface.co/models/google/gemma-2b"
 # Замените этот URL на URL вашей конкретной модели
-HF_API_URL = "YOUR_HUGGINGFACE_MODEL_API_URL_HERE"
+HF_API_URL = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
 
 # --- Функции ---
 
