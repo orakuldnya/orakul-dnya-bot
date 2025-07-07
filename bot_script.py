@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # URL вашей модели на Hugging Face Inference API
 # Замените этот URL на URL вашей конкретной модели, если хотите попробовать другую.
 # Убедитесь, что вы приняли условия использования модели на HF, если она "gated".
-HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/DeepSeek-R1"
 
 # --- Функции ---
 
