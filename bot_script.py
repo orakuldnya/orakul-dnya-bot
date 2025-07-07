@@ -1,140 +1,125 @@
 import os
 import requests
-import telegram
-import logging
-# Для более новых версий python-telegram-bot
-from telegram import constants # Добавляем этот импорт
+import google.generativeai as genai
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# --- 1. Настройка API-ключей и идентификаторов ---
+# Получаем API-ключ Gemini из переменной окружения GitHub Secrets
+# Убедитесь, что в GitHub Secrets у вас есть секрет с именем GEMINI_API_KEY
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- Константы ---
-# URL вашей модели на Hugging Face Inference API
-# Замените этот URL на URL вашей конкретной модели, если хотите попробовать другую.
-# Убедитесь, что вы приняли условия использования модели на HF, если она "gated".
-HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/DeepSeek-R1"
+# Получаем токен вашего Telegram бота из переменной окружения GitHub Secrets
+# Убедитесь, что в GitHub Secrets у вас есть секрет с именем BOT_TOKEN
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# --- Функции ---
+# Получаем ID вашего Telegram канала из переменной окружения GitHub Secrets
+# Убедитесь, что в GitHub Secrets у вас есть секрет с именем CHANNEL_ID
+# Это может быть числовой ID канала (например, -1001234567890)
+# или @username_канала (если он публичный).
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
-def generate_horoscope(prompt: str) -> str:
-    """
-    Генерирует текст гороскопа с использованием Hugging Face Inference API.
-    """
-    hf_api_token = os.getenv("HF_API_TOKEN")
-    if not hf_api_token:
-        logger.error("HF_API_TOKEN не установлен в переменных окружения.")
-        return "Не удалось сгенерировать гороскоп: отсутствует токен API."
+# Инициализация модели Gemini
+# Если GEMINI_API_KEY не установлен, этот шаг выдаст ошибку
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    # Используем 'gemini-pro' для текстовых задач
+    # Если столкнетесь с ошибками или ограничениями, можно попробовать другие доступные модели,
+    # например, 'models/text-bison-001' (старая, но иногда доступная модель),
+    # но 'gemini-pro' предпочтительнее.
+    model = genai.GenerativeModel('gemini-pro')
+except Exception as e:
+    print(f"Ошибка инициализации Gemini API: {e}")
+    # Если API-ключ неверный или отсутствует, мы не сможем продолжить
+    # и бот не сможет отправить сообщение об ошибке в Telegram, так как Telegram еще не настроен.
+    exit(1) # Выходим из скрипта, так как нет смысла продолжать
 
-    headers = {
-        "Authorization": f"Bearer {hf_api_token}",
-        "Content-Type": "application/json"
+# --- 2. Подготовка промпта для гороскопа ---
+horoscope_prompt = """
+Ты - мудрый астролог, который составляет ежедневный гороскоп.
+Напиши сегодняшний гороскоп. Он должен быть:
+- Воодушевляющим и позитивным.
+- Содержать один-два полезных совета на день.
+- Не слишком длинным, 3-5 предложений.
+- Пиши на русском языке.
+"""
+
+# --- 3. Генерация гороскопа и отправка в Telegram ---
+try:
+    print("Попытка генерации гороскопа с помощью Gemini...")
+    # Генерируем гороскоп с помощью Gemini
+    gemini_response = model.generate_content(horoscope_prompt)
+    generated_horoscope = gemini_response.text
+    print("Гороскоп успешно сгенерирован Gemini.")
+
+    # Подготовка сообщения для Telegram
+    telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    message_text = f"Ваш ежедневный гороскоп:\n\n{generated_horoscope}\n\nНадеемся, день принесет вам удачу!"
+
+    telegram_payload = {
+        "chat_id": CHANNEL_ID,
+        "text": message_text,
+        "parse_mode": "HTML" # Можно использовать HTML для форматирования, если нужно
+                             # или "MarkdownV2"
     }
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 150, # Максимальное количество генерируемых токенов
-            "temperature": 0.7,    # Температура для генерации (контролирует случайность)
-            "do_sample": True,     # Включить сэмплирование
-            "return_full_text": False # Возвращать только сгенерированный текст
-        }
-    }
 
+    print("Попытка отправки гороскопа в Telegram...")
+    # Отправка сообщения в Telegram
+    telegram_response = requests.post(telegram_url, json=telegram_payload)
+    telegram_response.raise_for_status()  # Вызовет исключение для HTTP ошибок (4xx или 5xx)
+
+    print("Гороскоп успешно отправлен в Telegram!")
+
+except genai.GenerativeContentError as e:
+    # Ошибка, если Gemini не смог сгенерировать контент (например, контент заблокирован, лимиты)
+    print(f"Ошибка Gemini API при генерации контента: {e}")
+    error_message_tg = f"❌ Ошибка Gemini API при генерации гороскопа: {e}"
+    # Попытка отправить сообщение об ошибке в Telegram
     try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()  # Вызывает исключение для HTTP ошибок (4xx или 5xx)
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
 
-        logger.info(f"API Response Status Code: {response.status_code}")
-        logger.info(f"Raw API Response Text: {response.text}")
-
-        result = response.json()
-
-        # Hugging Face Inference API может возвращать список словарей.
-        # Проверяем структуру ответа и извлекаем сгенерированный текст.
-        if isinstance(result, list) and result and 'generated_text' in result[0]:
-            generated_text = result[0]['generated_text'].strip()
-            # Убираем возможный повтор промпта, если return_full_text=False не сработал идеально
-            if generated_text.lower().startswith(prompt.lower()):
-                generated_text = generated_text[len(prompt):].strip()
-            return generated_text
-        else:
-            logger.error(f"Неожиданная структура ответа от Hugging Face API: {result}")
-            return "Не удалось сгенерировать гороскоп: неожиданный формат ответа."
-
-    except requests.exceptions.HTTPError as http_err:
-        logger.error(f"HTTP ошибка при запросе к Hugging Face API: {http_err} - {response.text}")
-        return f"Ошибка API: {response.status_code} - {response.text[:200]}..."
-    except requests.exceptions.ConnectionError as conn_err:
-        logger.error(f"Ошибка соединения с Hugging Face API: {conn_err}")
-        return "Не удалось соединиться с API Hugging Face."
-    except requests.exceptions.Timeout as timeout_err:
-        logger.error(f"Таймаут запроса к Hugging Face API: {timeout_err}")
-        return "Превышено время ожидания ответа от API Hugging Face."
-    except requests.exceptions.RequestException as req_err:
-        logger.error(f"Неизвестная ошибка при запросе к Hugging Face API: {req_err}")
-        return "Произошла ошибка при запросе к API Hugging Face."
-    except Exception as e:
-        logger.error(f"Непредвиденная ошибка при генерации гороскопа: {e}", exc_info=True)
-        return "Произошла внутренняя ошибка при генерации гороскопа."
-
-
-async def send_telegram_message(bot_token: str, channel_id: str, message_text: str):
-    """
-    Отправляет сообщение в Telegram канал.
-    """
+except requests.exceptions.HTTPError as http_err:
+    # Ошибка HTTP при отправке в Telegram (например, неверный BOT_TOKEN или CHANNEL_ID)
+    print(f"HTTP ошибка при отправке в Telegram: {http_err}")
+    error_message_tg = f"❌ Ошибка отправки в Telegram (HTTP): {http_err}"
     try:
-        bot = telegram.Bot(token=bot_token)
-        # Использование строки 'Markdown' для parse_mode
-        await bot.send_message(chat_id=channel_id, text=message_text, parse_mode='Markdown')
-        logger.info(f"Сообщение успешно отправлено в канал {channel_id}.")
-    except telegram.error.BadRequest as e: # Обновлено для v20+
-        logger.error(f"Ошибка Telegram BadRequest: {e}")
-        if "chat not found" in str(e).lower():
-            logger.error(f"Канал с ID {channel_id} не найден или бот не имеет к нему доступа. Проверьте CHANNEL_ID.")
-        elif "unauthorized" in str(e).lower(): # Для Unauthorized ошибок в BadRequest
-            logger.error("Ошибка авторизации Telegram: Неверный BOT_TOKEN. Убедитесь, что BOT_TOKEN правильный и бот добавлен в канал с правами администратора.")
-        else:
-            logger.error(f"Проверьте CHANNEL_ID или права бота: {e}")
-    except telegram.error.TimedOut:
-        logger.error("Таймаут при отправке сообщения в Telegram.")
-    except telegram.error.TelegramError as e: # Более общий класс ошибок Telegram (для v20+)
-        logger.error(f"Произошла общая ошибка Telegram: {e}", exc_info=True)
-    except Exception as e:
-        logger.error(f"Непредвиденная ошибка при отправке сообщения в Telegram: {e}", exc_info=True)
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
 
+except requests.exceptions.ConnectionError as conn_err:
+    # Ошибка соединения с Telegram API (например, проблемы с сетью на GitHub Actions)
+    print(f"Ошибка соединения с Telegram API: {conn_err}")
+    error_message_tg = f"❌ Ошибка соединения с Telegram: {conn_err}"
+    try:
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
 
-async def main():
-    """
-    Основная функция, запускаемая GitHub Actions.
-    """
-    bot_token = os.getenv("BOT_TOKEN")
-    channel_id = os.getenv("CHANNEL_ID")
+except requests.exceptions.Timeout as timeout_err:
+    # Таймаут при запросе к Telegram API
+    print(f"Таймаут запроса к Telegram API: {timeout_err}")
+    error_message_tg = f"❌ Таймаут Telegram API: {timeout_err}"
+    try:
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
 
-    if not bot_token:
-        logger.error("BOT_TOKEN не установлен в переменных окружения. Выход.")
-        return
-    if not channel_id:
-        logger.error("CHANNEL_ID не установлен в переменных окружения. Выход.")
-        return
+except requests.exceptions.RequestException as req_err:
+    # Любая другая ошибка, связанная с requests (Telegram)
+    print(f"Неизвестная ошибка при запросе к Telegram API: {req_err}")
+    error_message_tg = f"❌ Неизвестная ошибка Telegram API: {req_err}"
+    try:
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
 
-    logger.info("Запуск генерации гороскопа...")
-
-    horoscope_prompt = "Напиши сегодняшний гороскоп, который будет воодушевлять и давать полезные советы на день."
-    horoscope_text = generate_horoscope(horoscope_prompt)
-
-    if horoscope_text.startswith("Не удалось сгенерировать гороскоп"):
-        final_message = f"**Ошибка генерации гороскопа:** {horoscope_text}\n\nПожалуйста, проверьте логи."
-    else:
-        final_message = f"**Ваш ежедневный гороскоп:**\n\n{horoscope_text}\n\n_Надеемся, день принесет вам удачу!_"
-
-    logger.info("Попытка отправить сообщение в Telegram...")
-    await send_telegram_message(bot_token, channel_id, final_message)
-    logger.info("Скрипт завершен.")
-
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+except Exception as e:
+    # Любая другая непредвиденная ошибка
+    print(f"Непредвиденная ошибка: {e}")
+    error_message_tg = f"❌ Непредвиденная ошибка скрипта: {e}"
+    # Попытка отправить сообщение об этой ошибке в Telegram, если это возможно
+    try:
+        requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg})
+    except Exception as tg_err:
+        print(f"Не удалось отправить сообщение об ошибке в Telegram: {tg_err}")
