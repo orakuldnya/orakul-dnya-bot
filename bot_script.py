@@ -2,6 +2,8 @@ import os
 import requests
 import google.generativeai as genai
 import google.api_core.exceptions
+import html # Импортируем модуль html для экранирования
+
 
 # --- 1. Настройка API-ключей и идентификаторов ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -20,7 +22,7 @@ except Exception as e:
             telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": f"❌ Бот: Ошибка инициализации Gemini API: {e}"})
         except:
-            pass # Игнорируем ошибку отправки ошибки
+            pass
     exit(1)
 
 # --- 2. Список знаков зодиака и их смайлики ---
@@ -45,8 +47,8 @@ print("Начинаем генерацию гороскопов для всех 
 all_horoscopes_text = "" # Переменная для сбора всех гороскопов
 error_messages_list = [] # Список для сбора ошибок, если они произойдут
 
-# Общий заголовок для сообщения
-all_horoscopes_text += "✨ **Ежедневный гороскоп для всех знаков зодиака:** ✨\n\n"
+# Общий заголовок для сообщения (используем HTML для жирного шрифта)
+all_horoscopes_text += "✨ <b>Ежедневный гороскоп для всех знаков зодиака:</b> ✨\n\n"
 all_horoscopes_text += "Надеемся, день принесет вам удачу!\n\n"
 
 for sign, emoji in zodiac_signs_with_emojis.items():
@@ -68,29 +70,34 @@ for sign, emoji in zodiac_signs_with_emojis.items():
         generated_horoscope = gemini_response.text
 
         # Удаляем лишние звездочки или другие символы, которые Gemini может добавить в начало/конец
+        # Это не экранирование, а очистка артефактов генерации
         generated_horoscope = generated_horoscope.strip('*').strip()
+
+        # Экранируем специальные HTML-символы в сгенерированном гороскопе
+        # Это КЛЮЧЕВОЕ ИЗМЕНЕНИЕ для 400 Bad Request
+        escaped_generated_horoscope = html.escape(generated_horoscope)
 
         print(f"Гороскоп для {sign} успешно сгенерирован Gemini.")
 
         # Добавляем гороскоп к общей строке
         # Используем HTML для форматирования в Telegram
-        # Важно: внутри generated_horoscope могут быть спецсимволы, но HTML-режим часто их терпим.
         all_horoscopes_text += (
-            f"{emoji} Гороскоп для <b>{sign}</b>:\n" # Убрали "на сегодня", чтобы не повторялось
-            f"{generated_horoscope}\n\n"
+            f"{emoji} Гороскоп для <b>{sign}</b>:\n"
+            f"{escaped_generated_horoscope}\n\n" # Используем экранированный текст здесь
         )
 
     except google.api_core.exceptions.GoogleAPICallError as e:
         print(f"Ошибка Google API для {sign}: {e}")
-        error_messages_list.append(f"❌ Ошибка Google API для <b>{sign}</b>: {e}")
+        # Ошибки тоже экранируем на всякий случай
+        error_messages_list.append(f"❌ Ошибка Google API для <b>{sign}</b>: {html.escape(str(e))}")
 
     except requests.exceptions.RequestException as req_err:
         print(f"Ошибка HTTP/Connection для {sign}: {req_err}")
-        error_messages_list.append(f"❌ Ошибка сети/запроса для <b>{sign}</b>: {req_err}")
+        error_messages_list.append(f"❌ Ошибка сети/запроса для <b>{sign}</b>: {html.escape(str(req_err))}")
 
     except Exception as e:
         print(f"Непредвиденная ошибка для {sign}: {e}")
-        error_messages_list.append(f"❌ Непредвиденная ошибка для <b>{sign}</b>: {e}")
+        error_messages_list.append(f"❌ Непредвиденная ошибка для <b>{sign}</b>: {html.escape(str(e))}")
 
 print("\nГенерация гороскопов для всех знаков завершена. Отправляем в Telegram...")
 
@@ -119,7 +126,7 @@ try:
 
 except requests.exceptions.HTTPError as http_err:
     print(f"HTTP ошибка при финальной отправке в Telegram: {http_err}")
-    error_message_tg = f"❌ HTTP ошибка финальной отправки в Telegram: {http_err}"
+    error_message_tg = f"❌ HTTP ошибка финальной отправки в Telegram: {html.escape(str(http_err))}"
     try:
         requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg, "parse_mode": "HTML"})
     except Exception as tg_err:
@@ -127,7 +134,7 @@ except requests.exceptions.HTTPError as http_err:
 
 except requests.exceptions.RequestException as req_err:
     print(f"Неизвестная ошибка при финальной отправке (Telegram): {req_err}")
-    error_message_tg = f"❌ Неизвестная ошибка финальной отправки Telegram: {req_err}"
+    error_message_tg = f"❌ Неизвестная ошибка финальной отправки Telegram: {html.escape(str(req_err))}"
     try:
         requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg, "parse_mode": "HTML"})
     except Exception as tg_err:
@@ -135,7 +142,7 @@ except requests.exceptions.RequestException as req_err:
 
 except Exception as e:
     print(f"Непредвиденная ошибка при финальной отправке: {e}")
-    error_message_tg = f"❌ Непредвиденная ошибка скрипта при финальной отправке: {e}"
+    error_message_tg = f"❌ Непредвиденная ошибка скрипта при финальной отправке: {html.escape(str(e))}"
     try:
         requests.post(telegram_url, json={"chat_id": CHANNEL_ID, "text": error_message_tg, "parse_mode": "HTML"})
     except Exception as tg_err:
