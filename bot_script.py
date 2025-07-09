@@ -115,7 +115,27 @@ try:
 
     # ... предыдущий код ...
 
+        # ... предыдущий код ...
+
     final_message_to_send = all_horoscopes_text
+
+    # Если были ошибки при генерации, добавим их в конец сообщения
+    if error_messages_list:
+        final_message_to_send += "\n\n---\n"
+        final_message_to_send += "При генерации некоторых гороскопов произошли ошибки:\n"
+        final_message_to_send += "\n".join(error_messages_list)
+
+    # *** ДОБАВЬТЕ ЭТУ СТРОКУ ***
+    print(f"Длина сообщения, отправляемого в Telegram: {len(final_message_to_send)} символов.")
+    # **************************
+
+    telegram_payload = {
+        "chat_id": CHANNEL_ID,
+        "text": final_message_to_send,
+        "parse_mode": "HTML"
+    }
+    # ... остальной код ...
+
 
     # Если были ошибки при генерации, добавим их в конец сообщения
     if error_messages_list:
